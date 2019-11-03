@@ -1,5 +1,9 @@
 {
     "files.associations": {
-        "chunk.h": "c"
+        "chunk.h": "c",
+        "*.tcc": "c",
+        "cmath": "c",
+        "type_traits": "c",
+        "typeinfo": "c"
     }
 }

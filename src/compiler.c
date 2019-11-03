@@ -333,6 +333,11 @@ static void binary(bool canAssign) {
     }
 }
 
+static void call(bool canAssign) {
+    uint8_t argCount = argumentList();
+    emitBytes(OP_CALL, argCount);
+}
+
 static void literal(bool canAssign) {
     switch (parser.previous.type) {
         case TOKEN_FALSE: emitByte(OP_FALSE); break;
@@ -423,7 +428,7 @@ static void and_(bool canAssign) {
 // columns:
 //  prefix,   infix,   precedence
 ParseRule rules[] = {                                              
-  { grouping, NULL,    PREC_NONE },       // TOKEN_LEFT_PAREN      
+  { grouping, call,    PREC_CALL },       // TOKEN_LEFT_PAREN      
   { NULL,     NULL,    PREC_NONE },       // TOKEN_RIGHT_PAREN     
   { NULL,     NULL,    PREC_NONE },       // TOKEN_LEFT_BRACE
   { NULL,     NULL,    PREC_NONE },       // TOKEN_RIGHT_BRACE     
@@ -501,6 +506,9 @@ static uint8_t parseVariable(const char* errorMessage) {
 }
 
 static void markInitialized() {
+    // when a top level function there is no local variable to mark
+    // initialized - the function is bound to a global variable
+    if (current->scopeDepth == 0) return;
     current->locals[current->localCount - 1].depth =
         current->scopeDepth;
 }
@@ -517,6 +525,23 @@ static void defineVariable(uint8_t global) {
     }
 
     emitBytes(OP_DEFINE_GLOBAL, global);
+}
+
+static uint8_t argumentList() {
+    uint8_t argCount = 0;
+    if (!check(TOKEN_RIGHT_PAREN)) {
+        do {
+            expression();
+
+            if (argCount == 255) {
+                error("Cannot have more than 255 arguments");
+            }
+            argCount++;
+        } while (match(TOKEN_COMMA));
+    }
+
+    consume(TOKEN_RIGHT_PAREN, "Expect ')' after arguments.");
+    return argCount;
 }
 
 static ParseRule* getRule(TokenType type) {
@@ -571,9 +596,6 @@ static void function(FunctionType type) {
 static void funDeclaration() {
     uint8_t global = parseVariable("Expect function name.");
     markInitialized();
-    // when a top level function there is no local variable to mark
-    // initialized - the function is bound to a global variable
-    if (current->scopeDepth == 0) return;
     function(TYPE_FUNCTION);
     defineVariable(global);
 }
