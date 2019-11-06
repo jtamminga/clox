@@ -157,6 +157,7 @@ static int emitJump(uint8_t instruction) {
 }
 
 static void emitReturn() {
+    emitByte(OP_NIL);
     emitByte(OP_RETURN);
 }
 
@@ -304,6 +305,67 @@ static void declareVariable() {
     
 
     addLocal(*name);
+}
+
+// returns index where variable was appended in globals table
+static uint8_t parseVariable(const char *errorMessage)
+{
+    consume(TOKEN_IDENTIFIER, errorMessage);
+
+    declareVariable();
+    // return dummy index, because local variables don't
+    // have index in globals table
+    if (current->scopeDepth > 0)
+        return 0;
+
+    return identifierConstant(&parser.previous);
+}
+
+static void markInitialized()
+{
+    // when a top level function there is no local variable to mark
+    // initialized - the function is bound to a global variable
+    if (current->scopeDepth == 0)
+        return;
+    current->locals[current->localCount - 1].depth =
+        current->scopeDepth;
+}
+
+// defining a variable is marking it ready for use.
+// this is marked by setting the scope depth
+// (remember that before init it is -1)
+static void defineVariable(uint8_t global)
+{
+    // we don't need to do anything if there is a local variable.
+    // we just leave the value (vars initializer) on top of the stack
+    if (current->scopeDepth > 0)
+    {
+        markInitialized();
+        return;
+    }
+
+    emitBytes(OP_DEFINE_GLOBAL, global);
+}
+
+static uint8_t argumentList()
+{
+    uint8_t argCount = 0;
+    if (!check(TOKEN_RIGHT_PAREN))
+    {
+        do
+        {
+            expression();
+
+            if (argCount == 255)
+            {
+                error("Cannot have more than 255 arguments");
+            }
+            argCount++;
+        } while (match(TOKEN_COMMA));
+    }
+
+    consume(TOKEN_RIGHT_PAREN, "Expect ')' after arguments.");
+    return argCount;
 }
 
 static void binary(bool canAssign) {
@@ -493,57 +555,6 @@ static void parsePrecedence(Precedence precedence) {
     }
 }
 
-// returns index where variable was appended in globals table
-static uint8_t parseVariable(const char* errorMessage) {
-    consume(TOKEN_IDENTIFIER, errorMessage);
-
-    declareVariable();
-    // return dummy index, because local variables don't
-    // have index in globals table
-    if (current->scopeDepth > 0) return 0;
-
-    return identifierConstant(&parser.previous);
-}
-
-static void markInitialized() {
-    // when a top level function there is no local variable to mark
-    // initialized - the function is bound to a global variable
-    if (current->scopeDepth == 0) return;
-    current->locals[current->localCount - 1].depth =
-        current->scopeDepth;
-}
-
-// defining a variable is marking it ready for use.
-// this is marked by setting the scope depth
-// (remember that before init it is -1)
-static void defineVariable(uint8_t global) {
-    // we don't need to do anything if there is a local variable.
-    // we just leave the value (vars initializer) on top of the stack
-    if (current->scopeDepth > 0) {
-        markInitialized();
-        return;
-    }
-
-    emitBytes(OP_DEFINE_GLOBAL, global);
-}
-
-static uint8_t argumentList() {
-    uint8_t argCount = 0;
-    if (!check(TOKEN_RIGHT_PAREN)) {
-        do {
-            expression();
-
-            if (argCount == 255) {
-                error("Cannot have more than 255 arguments");
-            }
-            argCount++;
-        } while (match(TOKEN_COMMA));
-    }
-
-    consume(TOKEN_RIGHT_PAREN, "Expect ')' after arguments.");
-    return argCount;
-}
-
 static ParseRule* getRule(TokenType type) {
     return &rules[type];
 }
@@ -587,7 +598,7 @@ static void function(FunctionType type) {
 
     // create the function object
     ObjFunction* function = endCompiler();
-    emitBytes(OP_CONSTANT, makeConstant(OBJ_VAL(function)));
+    emitBytes(OP_CLOSURE, makeConstant(OBJ_VAL(function)));
 
     // because we end compiler complete we we reach the function body,
     // there's no need to close the lingering outermost scope
@@ -675,7 +686,7 @@ static void forStatement() {
 static void ifStatement() {
     consume(TOKEN_LEFT_PAREN, "Expect '(' after 'if'.");
     expression();
-    consume(TOKEN_LEFT_PAREN, "Expect ')' after condition.");
+    consume(TOKEN_RIGHT_PAREN, "Expect ')' after condition.");
 
     // some explicit pops to make sure statements have a net
     // state effect of zero
@@ -697,6 +708,20 @@ static void printStatement() {
     expression();
     consume(TOKEN_SEMICOLON, "Expect ';' after value.");
     emitByte(OP_PRINT);
+}
+
+static void returnStatement() {
+    if (current->type == TYPE_SCRIPT) {
+        error("Cannot return from top-level code.");
+    }
+
+    if (match(TOKEN_SEMICOLON)) {
+        emitReturn();
+    } else {
+        expression();
+        consume(TOKEN_SEMICOLON, "Expect ';' after return value.");
+        emitByte(OP_RETURN);
+    }
 }
 
 static void whileStatement() {
@@ -762,6 +787,8 @@ static void statement() {
         forStatement();
     } else if (match(TOKEN_IF)) {
         ifStatement();
+    } else if (match(TOKEN_RETURN)) {
+        returnStatement();
     } else if (match(TOKEN_WHILE)) {
         whileStatement();
     } else if (match(TOKEN_LEFT_BRACE)) {
