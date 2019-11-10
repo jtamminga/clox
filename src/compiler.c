@@ -274,6 +274,7 @@ static void statement();
 static void declaration();
 static ParseRule* getRule(TokenType type);
 static void parsePrecedence(Precedence precedence);
+static void processPostOps();
 
 // returns the index where it was appended
 static uint8_t identifierConstant(Token *name) {
@@ -471,6 +472,7 @@ static void binary(bool canAssign) {
 static void call(bool canAssign) {
     uint8_t argCount = argumentList();
     emitBytes(OP_CALL, argCount);
+    processPostOps();
 }
 
 static void literal(bool canAssign) {
@@ -693,19 +695,21 @@ static void processPostOps() {
     PostProc* post = postProc;
     while (post != NULL) {
         emitVariableOps(post->token, false);
-        emitByte(post->op.type);
+        emitByte(post->op.type == TOKEN_INC ? OP_INC : OP_DEC);
         emitVariableOps(post->token, true);
+        emitByte(OP_POP);
 
         PostProc* next = post->next;
         FREE(PostProc*, post);
         post = next;
     }
+
+    postProc = NULL;
 }
 
 void expression() {
     // start with the lowest precedence level, assignment
     parsePrecedence(PREC_ASSIGNMENT);
-    processPostOps();
 }
 
 static void block() {
@@ -764,13 +768,16 @@ static void varDeclaration() {
     uint8_t global = parseVariable("Expect variable name.");
 
     if (match(TOKEN_EQUAL)) {
-        expression();
+        expression();        
     } else {
         emitByte(OP_NIL);
     }
     consume(TOKEN_SEMICOLON, "Expect ';' after variable declaration.");
 
     defineVariable(global);
+
+    // testing
+    processPostOps();
 }
 
 static void expressionStatement() {
@@ -813,6 +820,7 @@ static void forStatement() {
         // usually an assignment, so we emit a pop to discard its value
         expression();
         emitByte(OP_POP);
+        processPostOps();
         consume(TOKEN_RIGHT_PAREN, "Expect ')' after for clauses.");
 
         emitLoop(loopStart);
@@ -878,6 +886,7 @@ static void whileStatement() {
 
     consume(TOKEN_LEFT_PAREN, "Expect '(' after 'while'.");
     expression();
+    processPostOps(); // testing
     consume(TOKEN_RIGHT_PAREN, "Expect ')' after condition.");
 
     int exitJump = emitJump(OP_JUMP_IF_FALSE);
@@ -904,7 +913,6 @@ static void synchronize() {
             case TOKEN_FOR:
             case TOKEN_IF:
             case TOKEN_WHILE:
-            case TOKEN_PRINT:
             case TOKEN_RETURN:
                 return;
 
@@ -930,9 +938,7 @@ static void declaration() {
 }
 
 static void statement() {
-    if (match(TOKEN_PRINT)) {
-        printStatement();
-    } else if (match(TOKEN_FOR)) {
+    if (match(TOKEN_FOR)) {
         forStatement();
     } else if (match(TOKEN_IF)) {
         ifStatement();
@@ -946,6 +952,7 @@ static void statement() {
         endScope();
     } else {
         expressionStatement();
+        processPostOps();
     }
 }
 

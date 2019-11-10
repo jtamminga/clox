@@ -1,7 +1,6 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
-#include <time.h>
 
 #include "common.h"
 #include "compiler.h"
@@ -9,14 +8,9 @@
 #include "object.h"
 #include "memory.h"
 #include "vm.h"
+#include "native.h"
 
 VM vm;
-
-// native functions
-
-static Value clockNative(int argCount, Value* args) {
-    return NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
-}
 
 // end native functions
 
@@ -67,6 +61,7 @@ void initVM() {
     initTable(&vm.globals);
     initTable(&vm.strings);
 
+    defineNative("print", printNative);
     defineNative("clock", clockNative);
 }
 
