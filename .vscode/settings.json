@@ -4,6 +4,8 @@
         "*.tcc": "c",
         "cmath": "c",
         "type_traits": "c",
-        "typeinfo": "c"
+        "typeinfo": "c",
+        "memory.h": "c",
+        "object.h": "c"
     }
 }

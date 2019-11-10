@@ -337,6 +337,19 @@ static InterpretResult run() {
             case OP_SUBTRACT:      BINARY_OP(NUMBER_VAL, -); break;
             case OP_MULTIPLY:      BINARY_OP(NUMBER_VAL, *); break;
             case OP_DIVIDE:        BINARY_OP(NUMBER_VAL, /); break;
+
+            case OP_INC: {
+                if (IS_NUMBER(peek(0))) {
+                    double a = AS_NUMBER(pop());
+                    double x = a + 1;
+                    push(NUMBER_VAL(x));
+                } else {
+                    runtimeError("Can only increment numbers.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                break;
+            }
+
             case OP_NOT:
                 push(BOOL_VAL(isFalsy(pop())));
                 break;

@@ -5,6 +5,7 @@
 #include "common.h"
 #include "compiler.h"
 #include "scanner.h"
+#include "memory.h"
 
 #ifdef DEBUG_PRINT_CODE
 #include "debug.h"
@@ -17,6 +18,8 @@ typedef struct {
     bool panicMode;
 } Parser;
 
+// precedence levels for expressions
+// first item is the lowest, last is the highest
 typedef enum {                  
   PREC_NONE,                    
   PREC_ASSIGNMENT,  // =        
@@ -26,7 +29,8 @@ typedef enum {
   PREC_COMPARISON,  // < > <= >=
   PREC_TERM,        // + -      
   PREC_FACTOR,      // * /      
-  PREC_UNARY,       // ! -      
+  PREC_PREFIX,      // ! - ++ --  
+  PREC_POSTFIX,     // ++ --
   PREC_CALL,        // . () []  
   PREC_PRIMARY                  
 } Precedence;
@@ -44,6 +48,12 @@ typedef struct {
     int depth; // 0 is global scope
     bool isCaptured;
 } Local;
+
+typedef struct PostProc {
+    Token token;
+    Token op;
+    struct PostProc* next;
+} PostProc;
 
 typedef struct {
     uint8_t index;
@@ -69,6 +79,8 @@ typedef struct Compiler {
 Parser parser;
 
 Compiler* current = NULL;
+
+PostProc* postProc = NULL;
 
 static Chunk* currentChunk() {
     return &current->function->chunk;
@@ -218,6 +230,8 @@ static void initCompiler(Compiler* compiler, FunctionType type) {
     local->isCaptured = false;
     local->name.start = "";
     local->name.length = 0;
+
+    postProc = NULL;
 }
 
 static ObjFunction* endCompiler() {
@@ -496,6 +510,28 @@ static void string(bool canAssign) {
         parser.previous.length - 2)));
 }
 
+static void emitVariableOps(Token name, bool canAssign) {
+    uint8_t getOp, setOp;
+    int arg = resolveLocal(current, &name);
+    if (arg != -1) {
+        getOp = OP_GET_LOCAL;
+        setOp = OP_SET_LOCAL;
+    } else if ((arg = resolveUpvalue(current, &name)) != -1) {
+        getOp = OP_GET_UPVALUE;
+        setOp = OP_SET_UPVALUE;
+    } else {
+        arg = identifierConstant(&name);
+        getOp = OP_GET_GLOBAL;
+        setOp = OP_SET_GLOBAL;
+    }
+
+    if (canAssign) {
+        emitBytes(setOp, (uint8_t)arg);
+    } else {
+        emitBytes(getOp, (uint8_t)arg);
+    }
+}
+
 static void namedVariable(Token name, bool canAssign) {
     uint8_t getOp, setOp;
     int arg = resolveLocal(current, &name);
@@ -527,7 +563,7 @@ static void unary(bool canAssign) {
     TokenType operatorType = parser.previous.type;
 
     // compile the operand
-    parsePrecedence(PREC_UNARY);
+    parsePrecedence(PREC_PREFIX);
 
     // emit the operator instruction
     switch (operatorType) {
@@ -549,8 +585,33 @@ static void and_(bool canAssign) {
     patchJump(endJump);
 }
 
+static void inc(bool canAssign) {
+    // emitVariableOps(token, false); // emit OP_GET command
+    parsePrecedence(PREC_PREFIX);
+    emitByte(OP_INC); // need to create new OP code
+    // next need to emit OP_SET
+    // using namedVariable (but for a set without requiring =)
+    emitVariableOps(parser.previous, true);
+}
+
+static void handlePostOps() {
+    if (parser.current.type == TOKEN_INC) {
+        PostProc* post = (PostProc*)reallocate(NULL, 0, sizeof(PostProc));
+        post->token = parser.previous;
+        post->op = parser.current;
+
+        post->next = postProc;
+        postProc = post;
+
+        advance();
+    }
+}
+
 // columns:
 //  prefix,   infix,   precedence
+//
+// these are in the same order as the tokens found in scanner.h
+// Remember that enums are just numbers :)
 ParseRule rules[] = {                                              
   { grouping, call,    PREC_CALL },       // TOKEN_LEFT_PAREN      
   { NULL,     NULL,    PREC_NONE },       // TOKEN_RIGHT_PAREN     
@@ -570,7 +631,9 @@ ParseRule rules[] = {
   { NULL,     binary,  PREC_COMPARISON }, // TOKEN_GREATER         
   { NULL,     binary,  PREC_COMPARISON }, // TOKEN_GREATER_EQUAL   
   { NULL,     binary,  PREC_COMPARISON }, // TOKEN_LESS            
-  { NULL,     binary,  PREC_COMPARISON }, // TOKEN_LESS_EQUAL      
+  { NULL,     binary,  PREC_COMPARISON }, // TOKEN_LESS_EQUAL
+  { inc,      NULL,    PREC_NONE },     // TOKEN_INC,
+  { NULL,     NULL,    PREC_NONE },       // TOKEN_DEC,
   { variable, NULL,    PREC_NONE },       // TOKEN_IDENTIFIER      
   { string,   NULL,    PREC_NONE },       // TOKEN_STRING          
   { number,   NULL,    PREC_NONE },       // TOKEN_NUMBER          
@@ -605,6 +668,11 @@ static void parsePrecedence(Precedence precedence) {
     bool canAssign = precedence <= PREC_ASSIGNMENT;
     prefixRule(canAssign);
 
+    // post fix stuff here ++ --
+    // put token and op in a struct or something in an array
+    // then process all
+    handlePostOps();
+
     while (precedence <= getRule(parser.current.type)->precedence) {
         advance();
         ParseFn infixRule = getRule(parser.previous.type)->infix;
@@ -621,9 +689,23 @@ static ParseRule* getRule(TokenType type) {
     return &rules[type];
 }
 
+static void processPostOps() {
+    PostProc* post = postProc;
+    while (post != NULL) {
+        emitVariableOps(post->token, false);
+        emitByte(post->op.type);
+        emitVariableOps(post->token, true);
+
+        PostProc* next = post->next;
+        FREE(PostProc*, post);
+        post = next;
+    }
+}
+
 void expression() {
     // start with the lowest precedence level, assignment
     parsePrecedence(PREC_ASSIGNMENT);
+    processPostOps();
 }
 
 static void block() {

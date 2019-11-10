@@ -121,7 +121,7 @@ static TokenType identifierType() {
                 switch (scanner.start[1]) {
                     case 'a': return checkKeyword(2, 3, "lse", TOKEN_FALSE);
                     case 'o': return checkKeyword(2, 1, "r", TOKEN_FOR);
-                    case 'u': return checkKeyword(2, 1, "n", TOKEN_FUN);
+                    case 'n': return checkKeyword(2, 0, "", TOKEN_FUN);
                 }
             }
             break;
@@ -200,10 +200,21 @@ Token scanToken() {
         case ';': return makeToken(TOKEN_SEMICOLON);  
         case ',': return makeToken(TOKEN_COMMA);      
         case '.': return makeToken(TOKEN_DOT);        
-        case '-': return makeToken(TOKEN_MINUS);      
-        case '+': return makeToken(TOKEN_PLUS);       
         case '/': return makeToken(TOKEN_SLASH);      
         case '*': return makeToken(TOKEN_STAR);
+
+        // will be 3 possiblities
+        case '-': {
+            if (match('-')) return makeToken(TOKEN_DEC);
+            // -= in the future
+            return makeToken(TOKEN_MINUS);
+        }
+            
+        case '+': {
+            if (match('+')) return makeToken(TOKEN_INC);
+            // += in the future :)
+            return makeToken(TOKEN_PLUS);
+        }
 
         // 2 character tokens (that could be single char token)
         case '!':
