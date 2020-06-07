@@ -30,8 +30,15 @@ typedef struct {
     Table strings;
     ObjUpvalue* openUpvalues;
 
-    // store the 
+    // used to decide when to run the GC
+    size_t bytesAllocated;
+    size_t nextGC;
+
     Obj* objects;
+    // the gray stuff is for the GC
+    int grayCount;
+    int grayCapacity;
+    Obj** grayStack;
 } VM;
 
 typedef enum {
