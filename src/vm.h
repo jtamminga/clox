@@ -28,6 +28,7 @@ typedef struct {
     Table globals;
     // intern strings
     Table strings;
+    ObjString* initString;
     ObjUpvalue* openUpvalues;
 
     // used to decide when to run the GC
