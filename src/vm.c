@@ -314,6 +314,7 @@ static InterpretResult run() {
                 break;
             }
             case OP_NIL:      push(NIL_VAL); break;
+            case OP_DUP:      push(peek(0)); break;
             case OP_TRUE:     push(BOOL_VAL(true)); break;
             case OP_FALSE:    push(BOOL_VAL(false)); break;
             case OP_POP:      pop(); break;
@@ -418,6 +419,23 @@ static InterpretResult run() {
                 break;
             }
 
+            case OP_OUT_PROPERTY: {
+                if (!IS_INSTANCE(peek(0))) {
+                    runtimeError("Only instances have fields.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+
+                ObjInstance* instance = AS_INSTANCE(peek(0));
+                ObjString* name = READ_STRING();
+
+                Value value;
+                if (tableGet(&instance->fields, name, &value)) {
+                    push(value);
+                }
+                
+                break;
+            }
+
             case OP_GET_SUPER: {
                 ObjString* name = READ_STRING();
                 ObjClass* superclass = AS_CLASS(pop());
@@ -464,13 +482,63 @@ static InterpretResult run() {
 
             case OP_INC: {
                 if (IS_NUMBER(peek(0))) {
-                    double a = AS_NUMBER(pop());
-                    double x = a + 1;
-                    push(NUMBER_VAL(x));
+                    double num = AS_NUMBER(pop()) + 1;
+                    push(NUMBER_VAL(num));
                 } else {
                     runtimeError("Can only increment numbers.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
+                break;
+            }
+
+            case OP_DEC: {
+                if (IS_NUMBER(peek(0))) {
+                    double num = AS_NUMBER(pop()) - 1;
+                    push(NUMBER_VAL(num));
+                } else {
+                    runtimeError("Can only increment numbers.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                break;
+            }
+
+            case OP_INC_PROP: {
+                if (!IS_INSTANCE(peek(0))) {
+                    runtimeError("Only instances have properties.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+
+                ObjInstance* instance = AS_INSTANCE(peek(0));
+                ObjString* name = READ_STRING();
+
+                Value value;
+                if (tableGet(&instance->fields, name, &value)) {
+                    Value inc = NUMBER_VAL(AS_NUMBER(value) + 1);
+                    pop();
+                    push(inc);
+                    tableSet(&instance->fields, name, inc);
+                }
+
+                break;
+            }
+
+            case OP_DEC_PROP: {
+                if (!IS_INSTANCE(peek(0))) {
+                    runtimeError("Only instances have properties.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+
+                ObjInstance* instance = AS_INSTANCE(peek(0));
+                ObjString* name = READ_STRING();
+
+                Value value;
+                if (tableGet(&instance->fields, name, &value)) {
+                    Value dec = NUMBER_VAL(AS_NUMBER(value) - 1);
+                    pop();
+                    push(dec);
+                    tableSet(&instance->fields, name, dec);
+                }
+
                 break;
             }
 

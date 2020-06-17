@@ -199,19 +199,26 @@ Token scanToken() {
         case ';': return makeToken(TOKEN_SEMICOLON);  
         case ',': return makeToken(TOKEN_COMMA);      
         case '.': return makeToken(TOKEN_DOT);        
-        case '/': return makeToken(TOKEN_SLASH);      
-        case '*': return makeToken(TOKEN_STAR);
 
-        // will be 3 possiblities
+        case '/': {
+            if (match('=')) return makeToken(TOKEN_SLASH_EQUAL);
+            return makeToken(TOKEN_SLASH);      
+        }
+
+        case '*': {
+            if (match('=')) return makeToken(TOKEN_STAR_EQUAL);
+            return makeToken(TOKEN_STAR);
+        }
+
         case '-': {
             if (match('-')) return makeToken(TOKEN_DEC);
-            // -= in the future
+            if (match('=')) return makeToken(TOKEN_MINUS_EQUAL);
             return makeToken(TOKEN_MINUS);
         }
             
         case '+': {
             if (match('+')) return makeToken(TOKEN_INC);
-            // += in the future :)
+            if (match('=')) return makeToken(TOKEN_PLUS_EQUAL);
             return makeToken(TOKEN_PLUS);
         }
 

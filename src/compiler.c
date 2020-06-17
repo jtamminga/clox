@@ -22,7 +22,8 @@ typedef struct {
 // precedence levels for expressions
 // first item is the lowest, last is the highest
 typedef enum {                  
-  PREC_NONE,                    
+  PREC_NONE,               
+  PREC_POSTFIX,     // ++ --     
   PREC_ASSIGNMENT,  // =        
   PREC_OR,          // or       
   PREC_AND,         // and      
@@ -30,8 +31,7 @@ typedef enum {
   PREC_COMPARISON,  // < > <= >=
   PREC_TERM,        // + -      
   PREC_FACTOR,      // * /      
-  PREC_PREFIX,      // ! - ++ --  
-  PREC_POSTFIX,     // ++ --
+  PREC_PREFIX,      // ! - ++ --
   PREC_CALL,        // . () []  
   PREC_PRIMARY                  
 } Precedence;
@@ -49,12 +49,6 @@ typedef struct {
     int depth; // 0 is global scope
     bool isCaptured;
 } Local;
-
-typedef struct PostProc {
-    Token token;
-    Token op;
-    struct PostProc* next;
-} PostProc;
 
 typedef struct {
     uint8_t index;
@@ -90,8 +84,6 @@ Parser parser;
 ClassCompiler* currentClass = NULL;
 
 Compiler* current = NULL;
-
-PostProc* postProc = NULL;
 
 static Chunk* currentChunk() {
     return &current->function->chunk;
@@ -251,8 +243,6 @@ static void initCompiler(Compiler* compiler, FunctionType type) {
         local->name.start = "";
         local->name.length = 0;
     }
-
-    postProc = NULL;
 }
 
 static ObjFunction* endCompiler() {
@@ -289,13 +279,31 @@ static void endScope() {
     }
 }
 
+static bool matchEquality() {
+    return match(TOKEN_EQUAL)
+        || match(TOKEN_PLUS_EQUAL)
+        || match(TOKEN_MINUS_EQUAL)
+        || match(TOKEN_STAR_EQUAL)
+        || match(TOKEN_SLASH_EQUAL);
+}
+
+static void emitEquality(TokenType type) {
+    switch (type) {
+        case TOKEN_PLUS_EQUAL: emitByte(OP_ADD); break;
+        case TOKEN_MINUS_EQUAL: emitByte(OP_SUBTRACT); break;
+        case TOKEN_STAR_EQUAL: emitByte(OP_MULTIPLY); break;
+        case TOKEN_SLASH_EQUAL: emitByte(OP_DIVIDE); break;
+        default:
+            break; // unreachable
+    }
+}
+
 // forward declarations
 static void expression();
 static void statement();
 static void declaration();
 static ParseRule* getRule(TokenType type);
 static void parsePrecedence(Precedence precedence);
-static void processPostOps();
 
 // returns the index where it was appended
 static uint8_t identifierConstant(Token *name) {
@@ -403,8 +411,7 @@ static void declareVariable() {
 }
 
 // returns index where variable was appended in globals table
-static uint8_t parseVariable(const char *errorMessage)
-{
+static uint8_t parseVariable(const char *errorMessage) {
     consume(TOKEN_IDENTIFIER, errorMessage);
 
     declareVariable();
@@ -416,8 +423,7 @@ static uint8_t parseVariable(const char *errorMessage)
     return identifierConstant(&parser.previous);
 }
 
-static void markInitialized()
-{
+static void markInitialized() {
     // when a top level function there is no local variable to mark
     // initialized - the function is bound to a global variable
     if (current->scopeDepth == 0)
@@ -429,12 +435,10 @@ static void markInitialized()
 // defining a variable is marking it ready for use.
 // this is marked by setting the scope depth
 // (remember that before init it is -1)
-static void defineVariable(uint8_t global)
-{
+static void defineVariable(uint8_t global) {
     // we don't need to do anything if there is a local variable.
     // we just leave the value (vars initializer) on top of the stack
-    if (current->scopeDepth > 0)
-    {
+    if (current->scopeDepth > 0) {
         markInitialized();
         return;
     }
@@ -442,17 +446,13 @@ static void defineVariable(uint8_t global)
     emitBytes(OP_DEFINE_GLOBAL, global);
 }
 
-static uint8_t argumentList()
-{
+static uint8_t argumentList() {
     uint8_t argCount = 0;
-    if (!check(TOKEN_RIGHT_PAREN))
-    {
-        do
-        {
+    if (!check(TOKEN_RIGHT_PAREN)) {
+        do {
             expression();
 
-            if (argCount == 255)
-            {
+            if (argCount == 255) {
                 error("Cannot have more than 255 arguments");
             }
             argCount++;
@@ -493,22 +493,37 @@ static void binary(bool canAssign) {
 static void call(bool canAssign) {
     uint8_t argCount = argumentList();
     emitBytes(OP_CALL, argCount);
-    processPostOps();
 }
 
 static void dot(bool canAssign) {
     consume(TOKEN_IDENTIFIER, "Expected property name after '.'.");
     uint8_t name = identifierConstant(&parser.previous);
 
-    if (canAssign && match(TOKEN_EQUAL)) {
-        expression();
+    if (canAssign && matchEquality()) {
+        if (parser.previous.type == TOKEN_EQUAL) {
+            expression();
+        } else {
+            TokenType type = parser.previous.type;
+            emitBytes(OP_OUT_PROPERTY, name);
+            expression();
+            emitEquality(type);
+        }
+
         emitBytes(OP_SET_PROPERTY, name);
     } else if (match(TOKEN_LEFT_PAREN)) {
         uint8_t argCount = argumentList();
         emitBytes(OP_INVOKE, name);
         emitByte(argCount);
     } else {
-        emitBytes(OP_GET_PROPERTY, name);
+        if (match(TOKEN_INC)) {
+            emitBytes(OP_INC_PROP, name);
+            emitByte(OP_DEC);
+        } else if (match(TOKEN_DEC)) {
+            emitBytes(OP_DEC_PROP, name);
+            emitByte(OP_INC);
+        } else {
+            emitBytes(OP_GET_PROPERTY, name);
+        }
     }
 }
 
@@ -586,8 +601,16 @@ static void namedVariable(Token name, bool canAssign) {
         setOp = OP_SET_GLOBAL;
     }
 
-    if (canAssign && match(TOKEN_EQUAL)) {
-        expression();
+    if (canAssign && matchEquality()) {    
+        if (parser.previous.type == TOKEN_EQUAL) {
+            expression();
+        } else {
+            TokenType type = parser.previous.type;
+            emitBytes(getOp, (uint8_t)arg);
+            expression();
+            emitEquality(type);
+        }
+        
         emitBytes(setOp, (uint8_t)arg);
     } else {
         emitBytes(getOp, (uint8_t)arg);
@@ -596,6 +619,15 @@ static void namedVariable(Token name, bool canAssign) {
 
 static void variable(bool canAssign) {
     namedVariable(parser.previous, canAssign);
+
+    if (check(TOKEN_INC) || check(TOKEN_DEC)) {
+        emitByte(OP_DUP);
+        emitByte(parser.current.type == TOKEN_INC ? OP_INC : OP_DEC);
+        emitVariableOps(parser.previous, true);
+        emitByte(OP_POP);
+
+        advance();
+    }
 }
 
 static Token syntheticToken(const char* text) {
@@ -644,8 +676,12 @@ static void unary(bool canAssign) {
 
     // emit the operator instruction
     switch (operatorType) {
-        case TOKEN_BANG: emitByte(OP_NOT); break;
-        case TOKEN_MINUS: emitByte(OP_NEGATE); break;
+        case TOKEN_BANG:
+            emitByte(OP_NOT);
+            break;
+        case TOKEN_MINUS:
+            emitByte(OP_NEGATE);
+            break;
         default:
             return; // unreachable
     }
@@ -662,25 +698,26 @@ static void and_(bool canAssign) {
     patchJump(endJump);
 }
 
-static void inc(bool canAssign) {
-    // emitVariableOps(token, false); // emit OP_GET command
-    parsePrecedence(PREC_PREFIX);
-    emitByte(OP_INC); // need to create new OP code
-    // next need to emit OP_SET
-    // using namedVariable (but for a set without requiring =)
-    emitVariableOps(parser.previous, true);
-}
+// handle pre increment and decrement operator & variable
+static void incdec(bool canAssign) {
+    Token op = parser.previous;
+    bool prop = false;
+    uint8_t name;
 
-static void handlePostOps() {
-    if (parser.current.type == TOKEN_INC) {
-        PostProc* post = (PostProc*)reallocate(NULL, 0, sizeof(PostProc));
-        post->token = parser.previous;
-        post->op = parser.current;
+    advance();
+    emitVariableOps(parser.previous, false);
+    while(match(TOKEN_DOT)) {
+        prop = true;
 
-        post->next = postProc;
-        postProc = post;
+        consume(TOKEN_IDENTIFIER, "Expected property name after '.'.");
+        name = identifierConstant(&parser.previous);
+    }
 
-        advance();
+    if (prop) {
+        emitBytes(op.type == TOKEN_INC ? OP_INC_PROP : OP_DEC_PROP, name);
+    } else {
+        emitByte(op.type == TOKEN_INC ? OP_INC : OP_DEC);
+        emitVariableOps(parser.previous, true);
     }
 }
 
@@ -709,8 +746,12 @@ ParseRule rules[] = {
   { NULL,     binary,  PREC_COMPARISON }, // TOKEN_GREATER_EQUAL   
   { NULL,     binary,  PREC_COMPARISON }, // TOKEN_LESS            
   { NULL,     binary,  PREC_COMPARISON }, // TOKEN_LESS_EQUAL
-  { inc,      NULL,    PREC_NONE },       // TOKEN_INC,
-  { NULL,     NULL,    PREC_NONE },       // TOKEN_DEC,
+  { incdec,   NULL,    PREC_NONE },       // TOKEN_INC,
+  { incdec,   NULL,    PREC_NONE },       // TOKEN_DEC,
+  { NULL,     NULL,    PREC_NONE },       // TOKEN_PLUS_EQUAL
+  { NULL,     NULL,    PREC_NONE },       // TOKEN_MINUS_EQUAL
+  { NULL,     NULL,    PREC_NONE },       // TOKEN_STAR_EQUAL
+  { NULL,     NULL,    PREC_NONE },       // TOKEN_SLASH_EQUAL
   { variable, NULL,    PREC_NONE },       // TOKEN_IDENTIFIER      
   { string,   NULL,    PREC_NONE },       // TOKEN_STRING          
   { number,   NULL,    PREC_NONE },       // TOKEN_NUMBER          
@@ -745,11 +786,6 @@ static void parsePrecedence(Precedence precedence) {
     bool canAssign = precedence <= PREC_ASSIGNMENT;
     prefixRule(canAssign);
 
-    // post fix stuff here ++ --
-    // put token and op in a struct or something in an array
-    // then process all
-    handlePostOps();
-
     while (precedence <= getRule(parser.current.type)->precedence) {
         advance();
         ParseFn infixRule = getRule(parser.previous.type)->infix;
@@ -764,22 +800,6 @@ static void parsePrecedence(Precedence precedence) {
 
 static ParseRule* getRule(TokenType type) {
     return &rules[type];
-}
-
-static void processPostOps() {
-    PostProc* post = postProc;
-    while (post != NULL) {
-        emitVariableOps(post->token, false);
-        emitByte(post->op.type == TOKEN_INC ? OP_INC : OP_DEC);
-        emitVariableOps(post->token, true);
-        emitByte(OP_POP);
-
-        PostProc* next = post->next;
-        FREE(PostProc*, post);
-        post = next;
-    }
-
-    postProc = NULL;
 }
 
 void expression() {
@@ -864,7 +884,7 @@ static void classDeclaration() {
     // if there is a superclass
     if (match(TOKEN_LESS)) {
         consume(TOKEN_IDENTIFIER, "Expect superclass name.");
-        variable(false);
+        namedVariable(parser.previous, false);
 
         if (identifiersEqual(&className, &parser.previous)) {
             error("A class cannot inherit from itself.");
@@ -912,9 +932,6 @@ static void varDeclaration() {
     consume(TOKEN_SEMICOLON, "Expect ';' after variable declaration.");
 
     defineVariable(global);
-
-    // testing
-    processPostOps();
 }
 
 static void expressionStatement() {
@@ -957,7 +974,6 @@ static void forStatement() {
         // usually an assignment, so we emit a pop to discard its value
         expression();
         emitByte(OP_POP);
-        processPostOps();
         consume(TOKEN_RIGHT_PAREN, "Expect ')' after for clauses.");
 
         emitLoop(loopStart);
@@ -1027,7 +1043,6 @@ static void whileStatement() {
 
     consume(TOKEN_LEFT_PAREN, "Expect '(' after 'while'.");
     expression();
-    processPostOps(); // testing
     consume(TOKEN_RIGHT_PAREN, "Expect ')' after condition.");
 
     int exitJump = emitJump(OP_JUMP_IF_FALSE);
@@ -1095,7 +1110,6 @@ static void statement() {
         endScope();
     } else {
         expressionStatement();
-        processPostOps();
     }
 }
 

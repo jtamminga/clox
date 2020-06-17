@@ -6,6 +6,7 @@
         "type_traits": "c",
         "typeinfo": "c",
         "memory.h": "c",
-        "object.h": "c"
+        "object.h": "c",
+        "limits": "c"
     }
 }

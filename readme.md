@@ -83,3 +83,34 @@ IDENTIFIER     → ALPHA ( ALPHA | DIGIT )* ;
 ALPHA          → "a" ... "z" | "A" ... "Z" | "_" ;
 DIGIT          → "0" ... "9" ;
 ```
+
+# About
+
+## Precedence
+
+
+Type | Example
+---- | -------
+assignment | `=`
+or | `or`
+and | `and`
+equality | `==` `!=`
+comparison | `<` `>` `<=` `>=`
+term | `+` `-`
+factor | `*` `/`
+unary | `!` `-`
+call | `.` `()`
+
+
+Left association
+
+```
+1 + 1 + 1 + 1
+```
+
+is treated as 
+
+```
+((1 + 1) + 1) + 1
+```
+
