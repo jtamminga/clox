@@ -721,6 +721,11 @@ static void incdec(bool canAssign) {
     }
 }
 
+static void lamda(bool assign) {
+    function(TYPE_FUNCTION);
+    // defineVariable(global);
+}
+
 // columns:
 //  prefix,   infix,   precedence
 //
@@ -760,7 +765,7 @@ ParseRule rules[] = {
   { NULL,     NULL,    PREC_NONE },       // TOKEN_ELSE            
   { literal,  NULL,    PREC_NONE },       // TOKEN_FALSE           
   { NULL,     NULL,    PREC_NONE },       // TOKEN_FOR             
-  { NULL,     NULL,    PREC_NONE },       // TOKEN_FUN             
+  { lamda,    NULL,    PREC_NONE },       // TOKEN_FUN             
   { NULL,     NULL,    PREC_NONE },       // TOKEN_IF              
   { literal,  NULL,    PREC_NONE },       // TOKEN_NIL             
   { NULL,     or_,     PREC_OR },         // TOKEN_OR              
