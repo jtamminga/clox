@@ -225,8 +225,11 @@ Token scanToken() {
         // 2 character tokens (that could be single char token)
         case '!':
             return makeToken(match('=') ? TOKEN_BANG_EQUAL : TOKEN_BANG);
-        case '=':
-            return makeToken(match('=') ? TOKEN_EQUAL_EQUAL : TOKEN_EQUAL);
+        case '=': {
+            if (match('=')) return makeToken(TOKEN_EQUAL_EQUAL);
+            if (match('>')) return makeToken(TOKEN_ARROW);
+            return makeToken(TOKEN_EQUAL);
+        }
         case '<':
             return makeToken(match('=') ? TOKEN_LESS_EQUAL : TOKEN_LESS);
         case '>':

@@ -299,6 +299,7 @@ static void emitEquality(TokenType type) {
 }
 
 // forward declarations
+static void function();
 static void expression();
 static void statement();
 static void declaration();
@@ -461,6 +462,24 @@ static uint8_t argumentList() {
 
     consume(TOKEN_RIGHT_PAREN, "Expect ')' after arguments.");
     return argCount;
+}
+
+static void parameterList() {
+    // compile the parameter list
+    consume(TOKEN_LEFT_PAREN, "Expect '(' after function name.");
+    if (!check(TOKEN_RIGHT_PAREN)) {
+        do {
+            current->function->arity++;
+            if (current->function->arity > 255)
+            {
+                errorAtCurrent("Cannot have more than 255 parameters.");
+            }
+
+            uint8_t paramConst = parseVariable("Expect parameter name.");
+            defineVariable(paramConst);
+        } while (match(TOKEN_COMMA));
+    }
+    consume(TOKEN_RIGHT_PAREN, "Expect ')' after parameters.");
 }
 
 static void binary(bool canAssign) {
@@ -722,8 +741,27 @@ static void incdec(bool canAssign) {
 }
 
 static void lamda(bool assign) {
-    function(TYPE_FUNCTION);
-    // defineVariable(global);
+    Compiler compiler;
+    initCompiler(&compiler, TYPE_FUNCTION);
+    beginScope();
+
+    // compile the parameter list
+    parameterList();
+
+    consume(TOKEN_ARROW, "Expect '=>' before lambda body.");
+    expression();
+    // consume(TOKEN_SEMICOLON, "Expect ';' after lambda body.");
+    emitByte(OP_RETURN);
+
+    // create the function object
+    ObjFunction *function = endCompiler();
+    emitBytes(OP_CLOSURE, makeConstant(OBJ_VAL(function)));
+
+    for (int i = 0; i < function->upvalueCount; i++)
+    {
+        emitByte(compiler.upvalues[i].isLocal ? 1 : 0);
+        emitByte(compiler.upvalues[i].index);
+    }
 }
 
 // columns:
@@ -757,6 +795,7 @@ ParseRule rules[] = {
   { NULL,     NULL,    PREC_NONE },       // TOKEN_MINUS_EQUAL
   { NULL,     NULL,    PREC_NONE },       // TOKEN_STAR_EQUAL
   { NULL,     NULL,    PREC_NONE },       // TOKEN_SLASH_EQUAL
+  { NULL,     NULL,    PREC_NONE },       // TOKEN_ARROW
   { variable, NULL,    PREC_NONE },       // TOKEN_IDENTIFIER      
   { string,   NULL,    PREC_NONE },       // TOKEN_STRING          
   { number,   NULL,    PREC_NONE },       // TOKEN_NUMBER          
@@ -826,19 +865,7 @@ static void function(FunctionType type) {
     beginScope();
 
     // compile the parameter list
-    consume(TOKEN_LEFT_PAREN, "Expect '(' after function name.");
-    if (!check(TOKEN_RIGHT_PAREN)) {
-        do {
-            current->function->arity++;
-            if (current->function->arity > 255) {
-                errorAtCurrent("Cannot have more than 255 parameters.");
-            }
-
-            uint8_t paramConst = parseVariable("Expect parameter name.");
-            defineVariable(paramConst);
-         } while (match(TOKEN_COMMA));
-    }
-    consume(TOKEN_RIGHT_PAREN, "Expect ')' after parameters.");
+    parameterList();
 
     // the body
     consume(TOKEN_LEFT_BRACE, "Expect '{' before function body.");

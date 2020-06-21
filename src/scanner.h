@@ -16,6 +16,7 @@ typedef enum {
   TOKEN_INC, TOKEN_DEC,
   TOKEN_PLUS_EQUAL, TOKEN_MINUS_EQUAL,
   TOKEN_STAR_EQUAL, TOKEN_SLASH_EQUAL,
+  TOKEN_ARROW,
 
   // Literals.                                        
   TOKEN_IDENTIFIER, TOKEN_STRING, TOKEN_NUMBER,       
