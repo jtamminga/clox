@@ -299,6 +299,7 @@ static void emitEquality(TokenType type) {
 }
 
 // forward declarations
+static void block();
 static void function();
 static void expression();
 static void statement();
@@ -740,7 +741,8 @@ static void incdec(bool canAssign) {
     }
 }
 
-static void lamda(bool assign) {
+// handle lambda and anonymous functions
+static void lambda(bool assign) {
     Compiler compiler;
     initCompiler(&compiler, TYPE_FUNCTION);
     beginScope();
@@ -748,10 +750,16 @@ static void lamda(bool assign) {
     // compile the parameter list
     parameterList();
 
-    consume(TOKEN_ARROW, "Expect '=>' before lambda body.");
-    expression();
-    // consume(TOKEN_SEMICOLON, "Expect ';' after lambda body.");
-    emitByte(OP_RETURN);
+    if (check(TOKEN_ARROW)) {
+        // compile lambda expression
+        consume(TOKEN_ARROW, "Expect '=>' before lambda body.");
+        expression();
+        emitByte(OP_RETURN);
+    } else {
+        // compile anonymous function body
+        consume(TOKEN_LEFT_BRACE, "Expect '{' before function body.");
+        block();
+    }
 
     // create the function object
     ObjFunction *function = endCompiler();
@@ -804,7 +812,7 @@ ParseRule rules[] = {
   { NULL,     NULL,    PREC_NONE },       // TOKEN_ELSE            
   { literal,  NULL,    PREC_NONE },       // TOKEN_FALSE           
   { NULL,     NULL,    PREC_NONE },       // TOKEN_FOR             
-  { lamda,    NULL,    PREC_NONE },       // TOKEN_FUN             
+  { lambda,    NULL,    PREC_NONE },       // TOKEN_FUN             
   { NULL,     NULL,    PREC_NONE },       // TOKEN_IF              
   { literal,  NULL,    PREC_NONE },       // TOKEN_NIL             
   { NULL,     or_,     PREC_OR },         // TOKEN_OR              
