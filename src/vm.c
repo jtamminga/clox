@@ -73,6 +73,7 @@ void initVM() {
 
     defineNative("print", printNative);
     defineNative("clock", clockNative);
+    defineNative("length", lengthNative);
 }
 
 void freeVM() {
@@ -172,15 +173,46 @@ static bool invokeFromClass(ObjClass* klass, ObjString* name, int argCount) {
     return call(AS_CLOSURE(method), argCount);
 }
 
+static ObjInstance* createInstance(const char* chars, Value obj) {
+    // get class from globals table
+    Value value;
+    if (!tableGet(&vm.globals, copyString(chars, 6), &value)) {
+        runtimeError("%s not defined.", chars);
+        return NULL;
+    }
+
+    // create instance of class
+    ObjClass* klass = AS_CLASS(value);
+    ObjInstance* instance = newInstance(klass);
+    vm.stackTop[-1] = OBJ_VAL(instance);
+
+    // inject instance with val field 
+    tableSet(&instance->fields, copyString("val", 3), obj);
+
+    // Value value;
+    // if (tableGet(&instance->fields, name, &value)) {
+    //     vm.stackTop[-argCount - 1] = value;
+    //     return callValue(value, argCount);
+    // }
+
+    return instance;
+}
+
 static bool invoke(ObjString* name, int argCount) {
     Value receiver = peek(argCount);
+    ObjInstance* instance;
+
+    if (IS_STRING(receiver)) {
+        instance = createInstance("String", receiver);
+        return invokeFromClass(instance->klass, name, argCount);
+    }
 
     if (!IS_INSTANCE(receiver)) {
         runtimeError("Only instances have methods.");
         return false;
     }
 
-    ObjInstance* instance = AS_INSTANCE(receiver);
+    instance = AS_INSTANCE(receiver);
 
     Value value;
     if (tableGet(&instance->fields, name, &value)) {

@@ -5,5 +5,6 @@
 
 Value printNative(int argCount, Value *args);
 Value clockNative(int argCount, Value *args);
+Value lengthNative(int argCount, Value *args);
 
 #endif
