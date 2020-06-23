@@ -468,6 +468,51 @@ static InterpretResult run() {
                 break;
             }
 
+            case OP_SET_ARRAY: {
+                if (!IS_ARRAY(peek(2))) {
+                    runtimeError("Only arrays can be indexed");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+
+                Value value = pop();
+                int index = AS_NUMBER(pop());
+                ObjArray* arr = AS_ARRAY(pop()); // pop array reference
+                for (int i = 0; i < index; i++) {
+                    if (arr == NULL) {
+                        runtimeError("Index out of bounds");
+                        return INTERPRET_RUNTIME_ERROR;
+                    }
+                    arr = arr->next;
+                }
+
+                arr->element = value;
+
+                push(value);
+                break;
+            }
+
+            case OP_GET_ARRAY: {
+                bool preserveRef = (bool) READ_BYTE();
+
+                if (!IS_ARRAY(peek(1))) {
+                    runtimeError("Only arrays can be indexed");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+
+                int index = AS_NUMBER(preserveRef ? peek(0) : pop());
+                ObjArray* arr = AS_ARRAY(preserveRef ? peek(1) : pop());
+                for (int i = 0; i < index; i++) {
+                    if (arr == NULL) {
+                        runtimeError("Index out of bounds");
+                        return INTERPRET_RUNTIME_ERROR;
+                    }
+                    arr = arr->next;
+                }
+
+                push(arr->element);
+                break;
+            }
+
             case OP_GET_SUPER: {
                 ObjString* name = READ_STRING();
                 ObjClass* superclass = AS_CLASS(pop());
@@ -531,46 +576,6 @@ static InterpretResult run() {
                     runtimeError("Can only increment numbers.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
-                break;
-            }
-
-            case OP_INC_PROP: {
-                if (!IS_INSTANCE(peek(0))) {
-                    runtimeError("Only instances have properties.");
-                    return INTERPRET_RUNTIME_ERROR;
-                }
-
-                ObjInstance* instance = AS_INSTANCE(peek(0));
-                ObjString* name = READ_STRING();
-
-                Value value;
-                if (tableGet(&instance->fields, name, &value)) {
-                    Value inc = NUMBER_VAL(AS_NUMBER(value) + 1);
-                    pop();
-                    push(inc);
-                    tableSet(&instance->fields, name, inc);
-                }
-
-                break;
-            }
-
-            case OP_DEC_PROP: {
-                if (!IS_INSTANCE(peek(0))) {
-                    runtimeError("Only instances have properties.");
-                    return INTERPRET_RUNTIME_ERROR;
-                }
-
-                ObjInstance* instance = AS_INSTANCE(peek(0));
-                ObjString* name = READ_STRING();
-
-                Value value;
-                if (tableGet(&instance->fields, name, &value)) {
-                    Value dec = NUMBER_VAL(AS_NUMBER(value) - 1);
-                    pop();
-                    push(dec);
-                    tableSet(&instance->fields, name, dec);
-                }
-
                 break;
             }
 
@@ -699,6 +704,26 @@ static InterpretResult run() {
             case OP_METHOD:
                 defineMethod(READ_STRING());
                 break;
+
+            case OP_ARRAY: {
+                int numElements = READ_BYTE();
+
+                if (numElements == 0) {
+                    push(OBJ_VAL(newArray(NIL_VAL)));
+                    break;
+                }
+
+                ObjArray* pre = NULL;
+                for (int i = 0; i < numElements; i++) {
+                    ObjArray* cur = newArray(pop());
+                    cur->next = pre;
+                    pre = cur;
+                }
+
+                push(OBJ_VAL(pre));
+
+                break;
+            }
         }
     }
 

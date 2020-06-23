@@ -119,10 +119,10 @@ int disassembleInstruction(Chunk* chunk, int offset) {
             return simpleInstruction("OP_INC", offset);
         case OP_DEC:
             return simpleInstruction("OP_DEC", offset);
-        case OP_INC_PROP:
-            return constantInstruction("OP_INC_PROP", chunk, offset);
-        case OP_DEC_PROP:
-            return constantInstruction("OP_DEC_PROP", chunk, offset);
+        case OP_GET_ARRAY:
+            return constantInstruction("OP_GET_ARRAY", chunk, offset);
+        case OP_SET_ARRAY:
+            return simpleInstruction("OP_SET_ARRAY", offset);
         case OP_NOT:
             return simpleInstruction("OP_NOT", offset);
         case OP_NEGATE:
@@ -141,6 +141,8 @@ int disassembleInstruction(Chunk* chunk, int offset) {
             return invokeInstruction("OP_SUPER_INVOKE", chunk, offset);
         case OP_PRINT:
             return simpleInstruction("OP_PRINT", offset);
+        case OP_ARRAY:
+            return constantInstruction("OP_ARRAY", chunk, offset);
         case OP_CLOSURE: {
             offset++;
             uint8_t constant = chunk->code[offset++];

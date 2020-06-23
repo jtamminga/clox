@@ -535,15 +535,7 @@ static void dot(bool canAssign) {
         emitBytes(OP_INVOKE, name);
         emitByte(argCount);
     } else {
-        if (match(TOKEN_INC)) {
-            emitBytes(OP_INC_PROP, name);
-            emitByte(OP_DEC);
-        } else if (match(TOKEN_DEC)) {
-            emitBytes(OP_DEC_PROP, name);
-            emitByte(OP_INC);
-        } else {
-            emitBytes(OP_GET_PROPERTY, name);
-        }
+        emitBytes(OP_GET_PROPERTY, name);
     }
 }
 
@@ -639,15 +631,6 @@ static void namedVariable(Token name, bool canAssign) {
 
 static void variable(bool canAssign) {
     namedVariable(parser.previous, canAssign);
-
-    if (check(TOKEN_INC) || check(TOKEN_DEC)) {
-        emitByte(OP_DUP);
-        emitByte(parser.current.type == TOKEN_INC ? OP_INC : OP_DEC);
-        emitVariableOps(parser.previous, true);
-        emitByte(OP_POP);
-
-        advance();
-    }
 }
 
 static Token syntheticToken(const char* text) {
@@ -718,31 +701,8 @@ static void and_(bool canAssign) {
     patchJump(endJump);
 }
 
-// handle pre increment and decrement operator & variable
-static void incdec(bool canAssign) {
-    Token op = parser.previous;
-    bool prop = false;
-    uint8_t name;
-
-    advance();
-    emitVariableOps(parser.previous, false);
-    while(match(TOKEN_DOT)) {
-        prop = true;
-
-        consume(TOKEN_IDENTIFIER, "Expected property name after '.'.");
-        name = identifierConstant(&parser.previous);
-    }
-
-    if (prop) {
-        emitBytes(op.type == TOKEN_INC ? OP_INC_PROP : OP_DEC_PROP, name);
-    } else {
-        emitByte(op.type == TOKEN_INC ? OP_INC : OP_DEC);
-        emitVariableOps(parser.previous, true);
-    }
-}
-
 // handle lambda and anonymous functions
-static void lambda(bool assign) {
+static void lambda(bool canAssign) {
     Compiler compiler;
     initCompiler(&compiler, TYPE_FUNCTION);
     beginScope();
@@ -772,6 +732,43 @@ static void lambda(bool assign) {
     }
 }
 
+static void array(bool canAssign) {
+    uint8_t numElements = 0;
+    if (!check(TOKEN_RIGHT_SQR)) {
+        do {
+            expression();
+            numElements++;
+        } while(match(TOKEN_COMMA));
+    }
+
+    emitBytes(OP_ARRAY, numElements);
+    consume(TOKEN_RIGHT_SQR, "Expected ']' after array litteral.");
+}
+
+static void indexer(bool canAssign) {
+    expression();
+    consume(TOKEN_RIGHT_SQR, "Expected ']' after array index.");
+
+    if (canAssign && matchEquality()) {
+        if (parser.previous.type == TOKEN_EQUAL) {
+            expression();
+        } else {
+            TokenType type = parser.previous.type;
+            emitBytes(OP_GET_ARRAY, 1);
+            expression();
+            emitEquality(type);
+        }
+
+        emitByte(OP_SET_ARRAY);
+    } else if (match(TOKEN_LEFT_PAREN)) {
+        emitBytes(OP_GET_ARRAY, 0);
+        uint8_t argCount = argumentList();
+        emitBytes(OP_CALL, argCount);
+    } else {
+        emitBytes(OP_GET_ARRAY, 0);
+    }
+}
+
 // columns:
 //  prefix,   infix,   precedence
 //
@@ -789,6 +786,8 @@ ParseRule rules[] = {
   { NULL,     NULL,    PREC_NONE },       // TOKEN_SEMICOLON       
   { NULL,     binary,  PREC_FACTOR },     // TOKEN_SLASH           
   { NULL,     binary,  PREC_FACTOR },     // TOKEN_STAR            
+  { array,    indexer, PREC_CALL },       // TOKEN_LEFT_SQR            
+  { NULL,     NULL,    PREC_NONE },       // TOKEN_RIGHT_SQR            
   { unary,    NULL,    PREC_NONE },       // TOKEN_BANG            
   { NULL,     binary,  PREC_EQUALITY },   // TOKEN_BANG_EQUAL      
   { NULL,     binary,  PREC_EQUALITY },   // TOKEN_EQUAL           
@@ -797,8 +796,6 @@ ParseRule rules[] = {
   { NULL,     binary,  PREC_COMPARISON }, // TOKEN_GREATER_EQUAL   
   { NULL,     binary,  PREC_COMPARISON }, // TOKEN_LESS            
   { NULL,     binary,  PREC_COMPARISON }, // TOKEN_LESS_EQUAL
-  { incdec,   NULL,    PREC_NONE },       // TOKEN_INC,
-  { incdec,   NULL,    PREC_NONE },       // TOKEN_DEC,
   { NULL,     NULL,    PREC_NONE },       // TOKEN_PLUS_EQUAL
   { NULL,     NULL,    PREC_NONE },       // TOKEN_MINUS_EQUAL
   { NULL,     NULL,    PREC_NONE },       // TOKEN_STAR_EQUAL

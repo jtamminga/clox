@@ -198,7 +198,9 @@ Token scanToken() {
         case '}': return makeToken(TOKEN_RIGHT_BRACE);
         case ';': return makeToken(TOKEN_SEMICOLON);  
         case ',': return makeToken(TOKEN_COMMA);      
-        case '.': return makeToken(TOKEN_DOT);        
+        case '.': return makeToken(TOKEN_DOT);     
+        case '[': return makeToken(TOKEN_LEFT_SQR);
+        case ']': return makeToken(TOKEN_RIGHT_SQR);   
 
         case '/': {
             if (match('=')) return makeToken(TOKEN_SLASH_EQUAL);
@@ -211,13 +213,11 @@ Token scanToken() {
         }
 
         case '-': {
-            if (match('-')) return makeToken(TOKEN_DEC);
             if (match('=')) return makeToken(TOKEN_MINUS_EQUAL);
             return makeToken(TOKEN_MINUS);
         }
             
         case '+': {
-            if (match('+')) return makeToken(TOKEN_INC);
             if (match('=')) return makeToken(TOKEN_PLUS_EQUAL);
             return makeToken(TOKEN_PLUS);
         }

@@ -5,6 +5,7 @@
 #include "value.h"
 
 // instructions
+// note: this has to fit in uint8_t, so max 255 op codes
 typedef enum {
     OP_CONSTANT,
     OP_NIL,
@@ -35,8 +36,6 @@ typedef enum {
     OP_DIVIDE,
     OP_INC,
     OP_DEC,
-    OP_INC_PROP,
-    OP_DEC_PROP,
     OP_NOT,
     OP_NEGATE,
     OP_PRINT,
@@ -51,7 +50,10 @@ typedef enum {
     OP_RETURN,
     OP_CLASS,
     OP_INHERIT,
-    OP_METHOD
+    OP_METHOD,
+    OP_ARRAY,
+    OP_GET_ARRAY,
+    OP_SET_ARRAY
 } OpCode;
 
 // bytecode
