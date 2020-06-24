@@ -7,12 +7,37 @@
 // instructions
 // note: this has to fit in uint8_t, so max 255 op codes
 typedef enum {
+
+    // baisc ops
     OP_CONSTANT,
     OP_NIL,
     OP_DUP,
     OP_TRUE,
     OP_FALSE,
     OP_POP,
+
+    // math ops
+    OP_EQUAL,
+    OP_GREATER,
+    OP_LESS,
+    OP_NOT_EQUAL,
+    OP_GREATER_EQUAL,
+    OP_LESS_EQUAL,
+    OP_ADD,
+    OP_SUBTRACT,
+    OP_MULTIPLY,
+    OP_DIVIDE,
+    OP_INC,
+    OP_DEC,
+    OP_NOT,
+    OP_NEGATE,
+
+    // looping ops
+    OP_JUMP,
+    OP_JUMP_IF_FALSE,
+    OP_LOOP,
+
+    // getter & setter ops
     OP_GET_LOCAL,
     OP_SET_LOCAL,
     OP_GET_GLOBAL,
@@ -22,38 +47,28 @@ typedef enum {
     OP_DEFINE_GLOBAL,
     OP_GET_PROPERTY,
     OP_SET_PROPERTY,
-    OP_OUT_PROPERTY,
     OP_GET_SUPER,
-    OP_EQUAL,
-    OP_GREATER,
-    OP_LESS,
-    OP_NOT_EQUAL,
-    OP_GREATER_EQUAL,
-    OP_LESS_EQUAL,
-    OP_ADD,     
-    OP_SUBTRACT,
-    OP_MULTIPLY,
-    OP_DIVIDE,
-    OP_INC,
-    OP_DEC,
-    OP_NOT,
-    OP_NEGATE,
-    OP_PRINT,
-    OP_JUMP,
-    OP_JUMP_IF_FALSE,
-    OP_LOOP,
+    OP_GET_ARRAY,
+    OP_SET_ARRAY,
+    OP_OUT_PROPERTY,
+    OP_IN_PROPERTY,
+
+    // create obj ops
+    OP_CLASS,
+    OP_CLOSURE,
+    OP_METHOD,
+    OP_ARRAY,
+    OP_ANON_OBJ,
+
+    // other ops
     OP_CALL,
     OP_INVOKE,
     OP_SUPER_INVOKE,
-    OP_CLOSURE,
     OP_CLOSE_UPVALUE,
     OP_RETURN,
-    OP_CLASS,
     OP_INHERIT,
-    OP_METHOD,
-    OP_ARRAY,
-    OP_GET_ARRAY,
-    OP_SET_ARRAY
+    OP_NEXT,
+
 } OpCode;
 
 // bytecode

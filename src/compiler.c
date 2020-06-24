@@ -769,6 +769,32 @@ static void indexer(bool canAssign) {
     }
 }
 
+static void obj(bool canAssign) {
+    emitByte(OP_ANON_OBJ);
+
+    if (!check(TOKEN_RIGHT_BRACE)) {
+        do {
+            // parsePrecedence(PREC_CALL);
+            consume(TOKEN_IDENTIFIER, "Expect method name.");
+            uint8_t fieldName = identifierConstant(&parser.previous);
+
+            consume(TOKEN_COLON, "Expected ':' after field name.");
+            expression();
+            emitBytes(OP_IN_PROPERTY, fieldName);
+
+            // if (check(TOKEN_COLON)) {
+            //     consume(TOKEN_COLON, "Expected ':' after field name.");
+            //     expression();
+            //     emitBytes(OP_IN_PROPERTY, fieldName);
+            // } else {
+            //     emitBytes(OP_IN_PROPERTY, fieldName);
+            // }            
+        } while(match(TOKEN_COMMA));
+    }
+
+    consume(TOKEN_RIGHT_BRACE, "Expected '}' at end of object.");
+}
+
 // columns:
 //  prefix,   infix,   precedence
 //
@@ -777,7 +803,7 @@ static void indexer(bool canAssign) {
 ParseRule rules[] = {                                              
   { grouping, call,    PREC_CALL },       // TOKEN_LEFT_PAREN      
   { NULL,     NULL,    PREC_NONE },       // TOKEN_RIGHT_PAREN     
-  { NULL,     NULL,    PREC_NONE },       // TOKEN_LEFT_BRACE
+  { obj,      NULL,    PREC_NONE },       // TOKEN_LEFT_BRACE
   { NULL,     NULL,    PREC_NONE },       // TOKEN_RIGHT_BRACE     
   { NULL,     NULL,    PREC_NONE },       // TOKEN_COMMA           
   { NULL,     dot,     PREC_CALL },       // TOKEN_DOT             
@@ -788,6 +814,7 @@ ParseRule rules[] = {
   { NULL,     binary,  PREC_FACTOR },     // TOKEN_STAR            
   { array,    indexer, PREC_CALL },       // TOKEN_LEFT_SQR            
   { NULL,     NULL,    PREC_NONE },       // TOKEN_RIGHT_SQR            
+  { NULL,     NULL,    PREC_NONE },       // TOKEN_COLLON         
   { unary,    NULL,    PREC_NONE },       // TOKEN_BANG            
   { NULL,     binary,  PREC_EQUALITY },   // TOKEN_BANG_EQUAL      
   { NULL,     binary,  PREC_EQUALITY },   // TOKEN_EQUAL           
@@ -809,7 +836,7 @@ ParseRule rules[] = {
   { NULL,     NULL,    PREC_NONE },       // TOKEN_ELSE            
   { literal,  NULL,    PREC_NONE },       // TOKEN_FALSE           
   { NULL,     NULL,    PREC_NONE },       // TOKEN_FOR             
-  { lambda,    NULL,    PREC_NONE },       // TOKEN_FUN             
+  { lambda,   NULL,    PREC_NONE },       // TOKEN_FUN             
   { NULL,     NULL,    PREC_NONE },       // TOKEN_IF              
   { literal,  NULL,    PREC_NONE },       // TOKEN_NIL             
   { NULL,     or_,     PREC_OR },         // TOKEN_OR              
@@ -977,6 +1004,46 @@ static void expressionStatement() {
     emitByte(OP_POP);
 }
 
+static void forInStatement()
+{
+    // current token should be what is iteratable
+    // emitByte(OP_ITERATE)
+    // emitBytes(OP_NEXT, var)
+    // [ array ][ var ]
+
+    // get variable
+    emitByte(OP_NIL); // placeholder for local variable
+    defineVariable(0);
+
+    int var = resolveLocal(current, &parser.previous);
+    int exitJump = -1;
+
+    advance();
+
+    // output the iteratable object
+    parsePrecedence(PREC_CALL);
+    uint8_t name = identifierConstant(&parser.previous);
+    consume(TOKEN_RIGHT_PAREN, "Expect ')' after for clauses.");
+
+    int loopStart = currentChunk()->count;
+    
+    emitBytes(OP_NEXT, var);
+    // [ local i ][ array ][ continue bool ]
+    exitJump = emitJump(OP_JUMP_IF_FALSE);
+    emitByte(OP_POP);
+
+    statement();
+
+    emitLoop(loopStart);
+
+    if (exitJump != -1) {
+        patchJump(exitJump);
+        emitByte(OP_POP); // condition
+    }
+
+    endScope();
+}
+
 static void forStatement() {
     // remember that the increment executes at the end of each
     // loop iteration
@@ -987,7 +1054,20 @@ static void forStatement() {
     if (match(TOKEN_SEMICOLON)) {
         // no initializer
     } else if (match(TOKEN_VAR)) {
-        varDeclaration();
+        // this section is almost like varDeclaration();
+        // except there is a slight varient with the 'in' part
+        uint8_t global = parseVariable("Expect variable name.");
+
+        if (match(TOKEN_EQUAL)) {
+            expression();
+        } else if (check(TOKEN_COLON)) {
+            return forInStatement();
+        } else {
+            emitByte(OP_NIL);
+        }
+
+        consume(TOKEN_SEMICOLON, "Expect ';' after variable declaration.");
+        defineVariable(global);
     } else {
         expressionStatement();
     }
@@ -1049,12 +1129,6 @@ static void ifStatement() {
 
     if (match(TOKEN_ELSE)) statement();
     patchJump(elseJump);
-}
-
-static void printStatement() {
-    expression();
-    consume(TOKEN_SEMICOLON, "Expect ';' after value.");
-    emitByte(OP_PRINT);
 }
 
 static void returnStatement() {

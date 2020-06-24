@@ -201,6 +201,7 @@ Token scanToken() {
         case '.': return makeToken(TOKEN_DOT);     
         case '[': return makeToken(TOKEN_LEFT_SQR);
         case ']': return makeToken(TOKEN_RIGHT_SQR);   
+        case ':': return makeToken(TOKEN_COLON);
 
         case '/': {
             if (match('=')) return makeToken(TOKEN_SLASH_EQUAL);

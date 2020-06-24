@@ -79,6 +79,10 @@ int disassembleInstruction(Chunk* chunk, int offset) {
             return byteInstruction("OP_GET_LOCAL", chunk, offset);
         case OP_SET_LOCAL:
             return byteInstruction("OP_SET_LOCAL", chunk, offset);
+        case OP_OUT_PROPERTY:
+            return byteInstruction("OP_OUT_PROPERTY", chunk, offset);
+        case OP_IN_PROPERTY:
+            return byteInstruction("OP_IN_PROPERTY", chunk, offset);
         case OP_GET_GLOBAL:
             return constantInstruction("OP_GET_GLOBAL", chunk, offset);
         case OP_DEFINE_GLOBAL:
@@ -139,10 +143,10 @@ int disassembleInstruction(Chunk* chunk, int offset) {
             return invokeInstruction("OP_INVOKE", chunk, offset);
         case OP_SUPER_INVOKE:
             return invokeInstruction("OP_SUPER_INVOKE", chunk, offset);
-        case OP_PRINT:
-            return simpleInstruction("OP_PRINT", offset);
         case OP_ARRAY:
-            return constantInstruction("OP_ARRAY", chunk, offset);
+            return byteInstruction("OP_ARRAY", chunk, offset);
+        case OP_NEXT:
+            return byteInstruction("OP_NEXT", chunk, offset);
         case OP_CLOSURE: {
             offset++;
             uint8_t constant = chunk->code[offset++];
@@ -169,6 +173,8 @@ int disassembleInstruction(Chunk* chunk, int offset) {
             return constantInstruction("OP_METHOD", chunk, offset);
         case OP_INHERIT:
             return simpleInstruction("OP_INHERIT", offset);
+        case OP_ANON_OBJ:
+            return simpleInstruction("OP_ANON_OBJ", offset);
         default:
             printf("Unknown opcode %d\n", instruction);
             return offset + 1;

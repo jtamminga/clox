@@ -176,7 +176,7 @@ static bool invokeFromClass(ObjClass* klass, ObjString* name, int argCount) {
 static ObjInstance* createInstance(const char* chars, Value obj) {
     // get class from globals table
     Value value;
-    if (!tableGet(&vm.globals, copyString(chars, 6), &value)) {
+    if (!tableGet(&vm.globals, copyString(chars, strlen(chars)), &value)) {
         runtimeError("%s not defined.", chars);
         return NULL;
     }
@@ -468,6 +468,19 @@ static InterpretResult run() {
                 break;
             }
 
+            case OP_IN_PROPERTY: {
+                if (!IS_INSTANCE(peek(1))) {
+                    runtimeError("Only instances have fields.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+
+                ObjInstance* instance = AS_INSTANCE(peek(1));
+                tableSet(&instance->fields, READ_STRING(), peek(0));
+
+                pop(); // pop value, leave the instance
+                break;
+            }
+
             case OP_SET_ARRAY: {
                 if (!IS_ARRAY(peek(2))) {
                     runtimeError("Only arrays can be indexed");
@@ -602,12 +615,6 @@ static InterpretResult run() {
                 break;
             }
 
-            case OP_PRINT: {
-                printValue(pop());
-                printf("\n");
-                break;
-            }
-
             case OP_LOOP: {
                 uint16_t offset = READ_SHORT();
                 frame->ip -= offset;
@@ -722,6 +729,29 @@ static InterpretResult run() {
 
                 push(OBJ_VAL(pre));
 
+                break;
+            }
+
+            case OP_NEXT: {
+                uint8_t slot = READ_BYTE();
+
+                if (IS_NIL(peek(0))) {
+                    push(BOOL_VAL(false));
+                    break;
+                }
+
+                ObjArray* arr = AS_ARRAY(peek(0));
+                frame->slots[slot] = arr->element;
+                // vm.stackTop[-1] = arr->next;
+                pop();
+                push(arr->next == NULL ? NIL_VAL : OBJ_VAL(arr->next));
+                push(BOOL_VAL(arr != NULL));
+                break;
+            }
+
+            case OP_ANON_OBJ: {
+                ObjInstance* obj = newInstance(NULL);
+                push(OBJ_VAL(obj));
                 break;
             }
         }

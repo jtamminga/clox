@@ -164,9 +164,15 @@ void printObject(Value value) {
         case OBJ_FUNCTION:
             printFunction(AS_FUNCTION(value));
             break;
-        case OBJ_INSTANCE:
-            printf("%s instance", AS_INSTANCE(value)->klass->name->chars);
+        case OBJ_INSTANCE: {
+            ObjInstance* instance = AS_INSTANCE(value);
+            if (instance->klass == NULL) {
+                printf("<anonymous obj>");
+            } else {
+                printf("%s instance", instance->klass->name->chars);
+            }
             break;
+        }
         case OBJ_NATIVE:
             printf("<native fn>");
             break;
